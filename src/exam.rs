@@ -56,7 +56,6 @@ impl Exam {
         let timu = regex::Regex::new(r#"(?ms)<h3 class="mark_name.*?>(\d{1,}\.).*?<span class="colorShallow.*?>(.*?)</span>.*?div.*?>(.*?)</div>"#).unwrap();
         let re = regex::Regex::new(r#"(?ms)(^ {16}$.*?<span.*?num_option.*?">(?P<answer>.)</span>.*?<div class="fl answer.*?">(.*?)</div>){1,}"#).unwrap();
         loop {
-            time::sleep(Duration::from_secs(1)).await;
             let html = page.content().await?;
             if let Some(cap) = timu.captures(&html) {
                 let num = &cap[1];
@@ -88,14 +87,14 @@ impl Exam {
                         if let Some(tiku::题目类型::判断题 { content: _, answer }) = ans {
                             let answer = if answer { "A" } else { "B" };
                             page.click_builder(&format!("span:has-text(\"{}\")", answer))
-                                .click()
-                                .await?;
+                            .click()
+                            .await?;
                         }
                     } else if typ.contains("填空题") {
                         let ans = tiku::fuzzy_find(&tiku, &timu, "填空题").1;
                         println!("{:#?}", ans);
                         if let Some(tiku::题目类型::填空题 { content: _, answer }) = ans {
-                            let answer = answer.replace("_x000D_", "").replace("(1)", "").replace("\r\n", "\n");
+                            let answer = answer.replace("(1)", "");
                             page.click_builder("#ueditor_0").click().await?;
                             page.keyboard.input_text(answer.trim()).await?;
                         }
@@ -103,13 +102,15 @@ impl Exam {
                         let ans = tiku::fuzzy_find(&tiku, &timu, "论述题").1;
                         println!("{:#?}", ans);
                         if let Some(tiku::题目类型::填空题 { content: _, answer }) = ans {
-                            let answer = answer.replace("_x000D_", "").replace("(1)", "").replace("\r\n", "\n");
+                            let answer = answer.replace("(1)", "");
                             page.click_builder("#ueditor_0").click().await?;
                             page.keyboard.input_text(answer.trim()).await?;
                         }
                     }
                 }
 
+                time::sleep(Duration::from_millis(100)).await;
+                
                 match page.query_selector("a:has-text(\"下一题\")").await? {
                     Some(ele) => {
                         ele.click_builder().click().await?;
@@ -118,6 +119,7 @@ impl Exam {
                         break;
                     }
                 }
+                time::sleep(Duration::from_secs(1)).await;
             } else {
                 break;
             }

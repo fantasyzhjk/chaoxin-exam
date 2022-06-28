@@ -36,12 +36,12 @@ pub fn load(path: impl AsRef<Path>) -> Vec<题目类型> {
     let mut list = vec![];
     for row in r.rows().skip(1) {
         let content = if let DataType::String(content) = row[0].clone() {
-            content.trim().to_owned()
+            content.replace("_x000D_", "").replace("\r\n", "\n").trim().to_owned()
         } else {
             unimplemented!()
         };
         let answer = if let DataType::String(answer) = row[1].clone() {
-            answer.trim().to_owned()
+            answer.replace("_x000D_", "").replace("\r\n", "\n").trim().to_owned()
         } else {
             unimplemented!()
         };
