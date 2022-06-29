@@ -1,11 +1,8 @@
-
-
-use chaoxin_checkin::{CheckIn, Exam, tiku, Result};
+use chaoxin_checkin::{tiku, CheckIn, Exam, Result};
 use chrono::prelude::*;
 use paris::*;
+use std::{env, io};
 use tokio::time::{self, Duration};
-use std::env;
-
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,9 +19,11 @@ async fn main() -> Result<()> {
         c.login().await?;
     }
 
-    if let Some(path) = env::args().skip(1).next() {
-        c.load_tiku(path);
-    }
+    env::args().skip(1).next().map(|path| {
+        c.load_tiku(&path);
+        info!("已加载题库：{}", path);
+    });
+
     loop {
         c.main().await?;
     }

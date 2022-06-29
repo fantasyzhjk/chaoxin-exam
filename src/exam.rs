@@ -14,7 +14,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::time;
 
 pub struct Exam {
-    _playwright: Playwright,
+    _playwright: Playwright,    // 防止链接销毁
+    term: console::Term,
     pub context: BrowserContext,
     pub tiku: Option<Vec<tiku::题目类型>>,
 }
@@ -28,6 +29,7 @@ impl Exam {
         let context = browser.context_builder().build().await?;
         Ok(Self {
             _playwright: playwright,
+            term: console::Term::stdout(),
             tiku: None,
             context,
         })
@@ -40,11 +42,13 @@ impl Exam {
             .goto()
             .await?;
 
-        warn!("按回车继续 ↲");
-        io::stdin().read_line(&mut String::new())?;
+        warn!("请跳转到考试页面, 按任意键继续 ↲");
+        self.term.read_key()?;
+        self.term.clear_screen()?;
         page.close(None).await?;
         for page in self.context.pages()?.iter() {
             if page.title().await?.contains("考试") {
+                warn!("开始考试...");
                 self.exam(page).await?;
                 break;
             }
@@ -69,43 +73,48 @@ impl Exam {
                 let result = re.captures_iter(&html);
                 if typ.contains("单选题") {
                     for cap in result {
-                        time::sleep(Duration::from_millis(500)).await;
                         let ans = cap.name("answer").unwrap().as_str();
                         info!("{}", ans);
                         page.click_builder(&format!("span:has-text(\"{}\")", ans)).click().await?;
                     }
                 } else if typ.contains("多选题") {
                     for cap in result {
+                        time::sleep(Duration::from_millis(500)).await;
                         let ans = cap.name("answer").unwrap().as_str();
                         info!("{}", ans);
                         page.click_builder(&format!("span:has-text(\"{}\")", ans)).click().await?;
                     }
-                } else if let Some(tiku) = self.tiku.clone() {
-                    if typ.contains("判断题") {
-                        let ans = tiku::fuzzy_find(&tiku, &timu, "判断题").1;
-                        println!("{:#?}", ans);
-                        if let Some(tiku::题目类型::判断题 { content: _, answer }) = ans {
-                            let answer = if answer { "A" } else { "B" };
-                            page.click_builder(&format!("span:has-text(\"{}\")", answer))
-                            .click()
-                            .await?;
+                } else {
+                    if let Some(tiku) = self.tiku.clone() {
+                        if typ.contains("判断题") {
+                            let ans = tiku::fuzzy_find(&tiku, &timu, "判断题").1;
+                            println!("{:#?}", ans);
+                            if let Some(tiku::题目类型::判断题 { content: _, answer }) = ans {
+                                let answer = if answer { "A" } else { "B" };
+                                page.click_builder(&format!("span:has-text(\"{}\")", answer))
+                                .click()
+                                .await?;
+                            }
+                        } else if typ.contains("填空题") {
+                            let ans = tiku::fuzzy_find(&tiku, &timu, "填空题").1;
+                            println!("{:#?}", ans);
+                            if let Some(tiku::题目类型::填空题 { content: _, answer }) = ans {
+                                let answer = answer.replace("(1)", "");
+                                page.click_builder("#ueditor_0").click().await?;
+                                page.keyboard.input_text(answer.trim()).await?;
+                            }
+                        } else if typ.contains("论述题") {
+                            let ans = tiku::fuzzy_find(&tiku, &timu, "论述题").1;
+                            println!("{:#?}", ans);
+                            if let Some(tiku::题目类型::填空题 { content: _, answer }) = ans {
+                                let answer = answer.replace("(1)", "");
+                                page.click_builder("#ueditor_0").click().await?;
+                                page.keyboard.input_text(answer.trim()).await?;
+                            }
                         }
-                    } else if typ.contains("填空题") {
-                        let ans = tiku::fuzzy_find(&tiku, &timu, "填空题").1;
-                        println!("{:#?}", ans);
-                        if let Some(tiku::题目类型::填空题 { content: _, answer }) = ans {
-                            let answer = answer.replace("(1)", "");
-                            page.click_builder("#ueditor_0").click().await?;
-                            page.keyboard.input_text(answer.trim()).await?;
-                        }
-                    } else if typ.contains("论述题") {
-                        let ans = tiku::fuzzy_find(&tiku, &timu, "论述题").1;
-                        println!("{:#?}", ans);
-                        if let Some(tiku::题目类型::填空题 { content: _, answer }) = ans {
-                            let answer = answer.replace("(1)", "");
-                            page.click_builder("#ueditor_0").click().await?;
-                            page.keyboard.input_text(answer.trim()).await?;
-                        }
+                    } else {
+                        warn!("找不到题库，取消填写选择题以外的题目");
+                        break;
                     }
                 }
 
@@ -125,9 +134,9 @@ impl Exam {
             }
         }
 
-        warn!("填写结束, 按回车继续 ↲");
-        io::stdin().read_line(&mut String::new())?;
-        self.save_cookies().await.unwrap();
+        warn!("填写结束, 按任意键继续 ↲");
+        self.term.read_key()?;
+        self.save_cookies().await?;
         Ok(())
     }
 
